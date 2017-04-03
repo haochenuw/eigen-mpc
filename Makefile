@@ -1,3 +1,6 @@
+OBLIVC_PATH=~/Documents/Libraries/obliv-c
+
+
 OBLIVCC=$(OBLIVC_PATH)/bin/oblivcc
 
 binDir=bin

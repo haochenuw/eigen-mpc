@@ -17,6 +17,7 @@ void ofixed_sub(ofixed_t *out, ofixed_t a, ofixed_t b) obliv;
 void ofixed_mul(ofixed_t *out, ofixed_t a, ofixed_t b, size_t p) obliv;
 void ofixed_inner_product(ofixed_t *out, ofixed_t *a, ofixed_t *b, size_t p, size_t d) obliv;
 obliv bool ofixed_div(ofixed_t *out, ofixed_t a, ofixed_t b, size_t p) obliv;
+obliv bool ofixed_inv(ofixed_t *out, ofixed_t b, size_t p) obliv;
 obliv bool ofixed_div_overflow(ofixed_t *out, ofixed_t a, ofixed_t b, size_t p) obliv;
 void ofixed_sqrt(ofixed_t *out, ofixed_t a, size_t p) obliv;
 

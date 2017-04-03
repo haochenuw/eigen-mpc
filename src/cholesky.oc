@@ -10,7 +10,9 @@
 // solves a symmetric, positive definite linear system using cholesky decomposition
 void cholesky(void *v) {
 	double time_start = wallClock();
-
+	double sqrt_time = 0;
+	double cholesky_division_time = 0;
+	double inner_product_time = 0; 
 	linear_system_t *ls = v;
 	// allocate space for obliv values and read inputs
 	size_t d = ls->a.d[0];
@@ -46,22 +48,38 @@ void cholesky(void *v) {
 	}
 
 	if(ocCurrentParty() == 2) {printf("OT time: %f\n", wallClock() - time_start);}
-
+	double single_sqrt_time, single_div_time, single_dot_time;
 	// decompose a into L^T L
 	for(size_t j = 0; j < d; j++) {
-		for(size_t k = 0; k < j; k++) {
+		single_dot_time = wallClock();
+		for(size_t k = 0; k < j; k++){
 			for(size_t i = j; i < d; i++) {
 				ofixed_mul(&temp, a[idx(i,k)], a[idx(j,k)], ls->precision);
 				ofixed_sub(&a[idx(i,j)], a[idx(i,j)], temp);
 				//a[idx(i,j)] -= ofixed_mul(a[idx(i,k)], a[idx(j,k)], ls->precision);
 			}
 		}
+		inner_product_time += wallClock() - single_dot_time;
+		single_sqrt_time = wallClock(); 
 		ofixed_sqrt(&a[idx(j,j)], a[idx(j,j)], ls->precision);
+		sqrt_time += wallClock() - single_sqrt_time;
 		//a[idx(j,j)] = ofixed_sqrt(a[idx(j,j)], ls->precision);
-		for(size_t k = j + 1; k < d; k++) {
-			ofixed_div(&a[idx(k,j)], a[idx(k,j)], a[idx(j,j)], ls->precision);
-			//a[idx(k,j)] = ofixed_div(a[idx(k,j)], a[idx(j,j)], ls->precision);
+
+		
+		// Hao: invert only once, and then do multiplication. 
+		ofixed_inv(&temp, a[idx(j,j)], ls->precision);
+		for (size_t k = j + 1; k < d; k++){
+			ofixed_mul(&a[idx(k,j)], a[idx(k,j)], temp, ls->precision); 
 		}
+		
+		// original code.  
+		//for(size_t k = j + 1; k < d; k++) {
+		//	single_div_time = wallClock();
+		//	ofixed_div(&a[idx(k,j)], a[idx(k,j)], a[idx(j,j)], ls->precision);
+		//	cholesky_division_time += wallClock() - single_div_time; 
+		//	//a[idx(k,j)] = ofixed_div(a[idx(k,j)], a[idx(j,j)], ls->precision);
+		//}
+		
 	}
 
 	// compute y, where L^T y = b
@@ -85,30 +103,32 @@ void cholesky(void *v) {
 		ofixed_div(&beta[i], y[i], a[idx(i,i)], ls->precision);
 		//beta[i] = ofixed_div(y[i], a[idx(i,i)], ls->precision);
 	}
-
+	if(ocCurrentParty() == 2){
+		printf("sqrt time: %f\n", sqrt_time);
+		printf("division time in cholesky decomposition: %f\n", cholesky_division_time);
+		printf("inner product time  in cholesky decomposition: %f\n", inner_product_time);
+	}
 	// return the result
 	for(size_t i = 0; i < d; i++) {
 		ofixed_reveal(ls->beta.value + i, beta[i], 2); // <- is this right, or should it be &ls->beta.value[i]? <- isn't that the same?
-		//revealOblivInt(ls->beta.value + i, beta[i], 2);
-	}
-	
-	if(!ocInDebugProto()) {
-		ls->gates = yaoGateCount();
-	}
-
-	ofixed_free(&temp);
-	for (size_t ii = 0; ii < ((d * (d+1)) / 2); ii++) {
-		ofixed_free(&a[ii]);
-	}
-	for (size_t ii = 0; ii < d; ii++) {
-		ofixed_free(&b[ii]);
-		ofixed_free(&y[ii]);
-		ofixed_free(&beta[ii]);
-	}
-	free(a);
-	free(b);
-	free(y);
-	free(beta);
-	return;
-
+                //revealOblivInt(ls->beta.value + i, beta[i], 2);
+        }
+        
+        if(!ocInDebugProto()) {
+                ls->gates = yaoGateCount();
+        }
+        ofixed_free(&temp);
+        for (size_t ii = 0; ii < ((d * (d+1)) / 2); ii++) {
+                ofixed_free(&a[ii]);
+        }
+        for (size_t ii = 0; ii < d; ii++) {
+                ofixed_free(&b[ii]);
+                ofixed_free(&y[ii]);
+                ofixed_free(&beta[ii]);
+        }
+        free(a);
+        free(b);
+        free(y);
+        free(beta);
+        return;
 }

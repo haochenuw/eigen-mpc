@@ -161,6 +161,17 @@ void ofixed_mul(ofixed_t *out, ofixed_t a, ofixed_t b, size_t p) obliv {
 #endif
 }
 
+obliv bool ofixed_inv(ofixed_t *out, ofixed_t b, size_t p) obliv {
+     obig const_one; 
+     ~obliv() obig_init(&const_one, b.digits + ceildiv(p,8));
+     // setting to one
+     ~obliv() obig_one(&const_one);
+     return ofixed_div(out, const_one, b, p);
+}
+
+
+
+
 obliv bool ofixed_div(ofixed_t *out, ofixed_t a, ofixed_t b, size_t p) obliv {
 #if BIT_WIDTH_32
 	*out = ((obliv int64_t) a << p) / (obliv int64_t) b;
