@@ -307,7 +307,7 @@ int run_trusted_initializer(node *self, config *c, int precision, bool use_ot) {
 		secure_multiplication__msg__free_unpacked(pmsg_in, NULL);
 
 	}
-
+	// printf("From trusted party we have A = \n"
 	printf("A = \n");
 	for(size_t i = 0; i < c->d; i++) {
 		for(size_t j = 0; j <= i; j++) {
@@ -316,6 +316,7 @@ int run_trusted_initializer(node *self, config *c, int precision, bool use_ot) {
 		printf("\n");
 	}
 
+	//printf("From trusted party we have b = \n");
 	printf("b = \n");
 	for(size_t i = 0; i < c->d; i++) {
 		printf("%3.6f ", fixed_to_double((fixed_t) share_b[i], precision));
@@ -460,9 +461,9 @@ int run_party(
 
 	// read inputs and allocate result buffer
 	double normalizer = sqrt(pow(2,precision) * c->d * c->n);
-	status = read_matrix(c->input, &data, precision, true, normalizer);
+	status = read_matrix(c->input, &data, precision, false, 0);
 	check(!status, "Could not read data");
-	status = read_vector(c->input, &target, precision, true, normalizer);
+	status = read_vector(c->input, &target, precision, false, 0);
 	check(!status, "Could not read target");
 	size_t d = data.d[1];
 	check(c->n == target.len && d == c->d && c->n == data.d[0],

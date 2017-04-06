@@ -35,6 +35,9 @@ void cholesky(void *);
 void ldlt(void *);
 void cgd(void *);
 
+// functions to decompose matrices
+//void tridiag(void *); 
+
 // IO helpers
 int read_matrix(FILE *, matrix_t *, int, bool, double);
 int read_vector(FILE *, vector_t *, int, bool, double);

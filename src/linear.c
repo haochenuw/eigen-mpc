@@ -39,7 +39,7 @@ int read_matrix(FILE *file, matrix_t *matrix, int precision,
 	matrix->d[1] = m;
 	matrix->value = malloc(n*m*sizeof(fixed_t));
 
-//	printf("A = \n");
+	// printf("A = \n");
 	for(size_t i = 0; i < n; i++) {
 		for(size_t j = 0; j < m; j++) {
 			double val;
@@ -49,9 +49,9 @@ int read_matrix(FILE *file, matrix_t *matrix, int precision,
 			}
 			check(res == 1, "fscanf: %s.", strerror(errno));
 			matrix->value[i*m+j] = double_to_fixed(val, precision);
-//			printf("%f ", val);
+			//printf("%3.8f ", val);
 		}
-//		printf("\n");
+		//printf("\n");
 	}
 
 	return 0;
@@ -76,7 +76,7 @@ int read_vector(FILE *file, vector_t *vector,
 	vector->len = l;
 	vector->value = malloc(l * sizeof(fixed_t));
 
-//	printf("l = %d, b = \n", l);
+	//printf("l = %d, b = \n", l);
 	for(size_t i = 0; i < l; i++) {
 		double val;
 		res = fscanf(file, "%lf", &val);
@@ -85,9 +85,9 @@ int read_vector(FILE *file, vector_t *vector,
 		}
 		check(res == 1, "fscanf: %s.", strerror(errno));
 		vector->value[i] = double_to_fixed(val, precision);
-//		printf("%f ", val);
+		// printf("%3.8f ", val);
 	}
-//	printf("\n");
+	//printf("\n");
 
 	return 0;
 

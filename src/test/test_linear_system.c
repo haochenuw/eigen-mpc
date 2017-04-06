@@ -1,9 +1,13 @@
+#include <obliv_common.h>
 #include <errno.h>
 #include <obliv.h>
 #include <stdio.h>
 #include "linear.h"
 #include "util.h"
 #include "check_error.h"
+#include "input.h"
+#include "tridiag.h"
+
 
 int precision = 54;
 
@@ -59,7 +63,9 @@ int read_ls_from_file(int party, const char *filepath, linear_system_t *ls) {
 	} else {
 		ls->a = A_mask;
 		ls->b = b_mask;
+		//ls->beta.value = malloc( A_mask.d[1]*(A_mask.d[1] + 1)/2*sizeof(fixed_t));
 		ls->beta.value = malloc(A_mask.d[1]*sizeof(fixed_t));
+		//ls->beta.len = A_mask.d[1]*(A_mask.d[1]+1)/2;
 		ls->beta.len = A_mask.d[1];
 		free(A.value);
 		free(b.value);
@@ -122,16 +128,25 @@ int main(int argc, char **argv) {
 	      alg_index = 2;
 	}
 
-	execYaoProtocol(&pd, algorithms[alg_index], &ls);
+
+        execYaoProtocol(&pd, tridiag, &ls);
+	//execYaoProtocol(&pd, algorithms[alg_index], &ls);
 	//execDebugProtocol(&pd, algorithms[alg_index], &ls);
 
 	if(party == 2) {
 	  //check(ls.beta.len == d, "Computation error.");
 	  printf("Time elapsed: %f\n", wallClock() - time);
 	  printf("Number of gates: %lld\n", ls.gates);
-	  printf("Result: ");
+	  printf("Vector u: ");
 	  for(size_t i = 0; i < ls.beta.len; i++) {
 	    printf("%20.15f ", fixed_to_double(ls.beta.value[i], precision));
+	  }
+	  printf("\n");
+          printf("Matrix A: ");
+	  for(size_t i = 0; i < ls.beta.len; i++) {
+		for (size_t j = 0; j <= i; j++){
+	  		printf("%20.15f ", fixed_to_double(ls.a.value[idx(i,j)], precision)); 
+		}  
 	  }
 	  printf("\n");
 	}
@@ -160,9 +175,9 @@ int main(int argc, char **argv) {
 	}
 	*/
 	cleanupProtocol(&pd);
-	free(ls.a.value);
-	free(ls.b.value);
-	if (ls.beta.value) free(ls.beta.value);
+	//free(ls.a.value);
+	//free(ls.b.value);
+	//if (ls.beta.value) free(ls.beta.value);
 
 	return 0;
 error:

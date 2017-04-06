@@ -15,7 +15,7 @@
 #include "input.h"
 #include "util.h"
 #include "secure_multiplication/node.h"
-
+#include "tridiag.h"
 
 static int barrier(node *self) {
 	// wait until everybody is here
@@ -94,11 +94,11 @@ int main(int argc, char **argv) {
 	check(!status, "Could not create node");
 
 	if(party == 1) {
-		//printf("Party %d running as TI\n", party);
+		printf("Party %d running as TI\n", party);
 		status = run_trusted_initializer(self, c, precision, use_ot);
 		check(!status, "Error while running trusted initializer");
 	} else if(party > 2){
-		//printf("Party %d running as DP\n", party);
+		printf("Party %d running as DP\n", party);
 		status = run_party(self, c, precision, NULL, &share_A, &share_b, use_ot);
 		check(!status, "Error while running party %d", party);
 	}
@@ -116,12 +116,12 @@ int main(int argc, char **argv) {
   	//   - share_A and share_b are my shares of the equation
 
   	// The first data provider adds lambda to its share
-  	if(party == 3){
-  		fixed_t lambda_fixed = double_to_fixed(lambda, precision);
-  		for(size_t i = 0; i < c->d; i++) {
-  			share_A[idx(i,i)] += lambda_fixed;
-		}
-  	}
+  	//if(party == 3){
+  	//	fixed_t lambda_fixed = double_to_fixed(lambda, precision);
+  	//	for(size_t i = 0; i < c->d; i++) {
+  	//		share_A[idx(i,i)] += lambda_fixed;
+	//	}
+  	//}
 
 	// phase 2 starts here
 	if(party < 3){  // CSP and Evaluator
@@ -154,8 +154,9 @@ int main(int argc, char **argv) {
 		}
 
 		ls.self = self;
-		execYaoProtocol(pd, algorithms[alg_index], &ls);
-
+		//execYaoProtocol(pd, algorithms[alg_index], &ls);
+		//Hao: perform tridiag here. 
+		execYaoProtocol(pd, tridiag, &ls); 
 		if(party == 2) {
 		  //check(ls.beta.len == d, "Computation error.");
 		  printf("Time elapsed: %f\n", wallClock() - time);
@@ -175,6 +176,7 @@ int main(int argc, char **argv) {
 		printf("party %d connected successfully to CSP and Evaluator\n", party);
 		dcsSendIntArray(conn, share_A, c->d*(c->d + 1)/2);
 		dcsSendIntArray(conn, share_b, c->d);
+		printf("party %d has successfully sent all data\n", party); 
 		dcsClose(conn);
 	}
 

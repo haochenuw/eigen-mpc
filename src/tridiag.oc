@@ -3,17 +3,23 @@
 #include "linear.oh"
 #include "fixed.h"
 #include "fixed.oh"
+#include <stdio.h>
 #include "util.h"
-
+#include "tridiag.h"
 
 
 // reduce a  symmetric, positive semidefinite matrix to tridiagonal form
 void tridiag(void *v) {
+        printf("Calling tridiag from party %d\n", ocCurrentParty());
 	double time_start = wallClock(); 
+	linear_system_t *ls = v;
 	size_t d = ls->a.d[0]; 
-	ofixed_t *a = malloc((d*d)*sizeof(ofixed_t));
-	for (size_t ii = 0; ii < d*d; ii++){
-		ofxied_init(&a[ii]);
+	ofixed_t *a = malloc(((d * (d+1)) / 2) * sizeof(ofixed_t));
+	ofixed_t *beta = malloc(d*sizeof(ofixed_t));
+	ofixed_t *b = malloc(d*sizeof(ofixed_t));
+	for (size_t ii = 0; ii < d*(d+1)/2; ii++){
+		ofixed_init(&a[ii]);
+		ofixed_init(&beta[ii]);
 	}
 	// read data into the system.
 	ofixed_t *u = malloc(d*sizeof(ofixed_t));
@@ -21,6 +27,7 @@ void tridiag(void *v) {
 	ofixed_t *p = malloc(d*sizeof(ofixed_t));
 	for (size_t ii =0; ii < d; ii++)
 	{
+		ofixed_init(&b[ii]);
 		ofixed_init(&u[ii]);
 		ofixed_init(&uscaled[ii]);
 		ofixed_init(&p[ii]);
@@ -38,6 +45,8 @@ void tridiag(void *v) {
         ofixed_init(&temp0);
         obig  temp5;
         ~obliv() obig_init(&temp5, ls->precision);
+
+
 	
         if(read_symmetric_linear_system(ls, a, b)) {
                 fprintf(stderr, "Could not read inputs.");
@@ -47,34 +56,42 @@ void tridiag(void *v) {
                 return;
         }
 
-	
         // allocate output vector if not already done and we are party 2
         if(!(ls->beta.value) && ocCurrentParty() == 2) {
-                ls->beta.len = d*d;
-                ls->beta.value = malloc(d*d * sizeof(uint64_t));
+                ls->beta.len = d ;
+                ls->beta.value = malloc(d * sizeof(uint64_t));
         }
+
 
         if(ocCurrentParty() == 2) {printf("OT time: %f\n", wallClock() - time_start);}
 
 	// The Householder reduction 
-	for (size_t i=0; i < d-2; i++)
+	for (size_t outer = 0; outer < d-2; outer ++)
+	//for (size_t outer = 0; outer < 1; outer ++)
 	{
+		ofixed_import(&temp_norm,0); 
+		ofixed_import(&tempH, 0);
+		ofixed_import(&tempK, 0);
 		// compute the norm of the i-th sub-column. 
-		for(size_t j = i+1; j < d; j++){
-			ofixed_mul(&temp, a[idx(j,i)], a[idx(j,i)], ls->precision);
+		for(size_t j = outer +1; j < d; j++){
+			ofixed_mul(&temp, a[idx(j,outer)], a[idx(j,outer)], ls->precision);
 			ofixed_add(&temp_norm, temp, temp_norm); 
 		}
 		ofixed_sqrt(&temp_norm, temp_norm, ls->precision);
 
-		// construct the vector u.
-		for(size_t jj = i+1; jj <d ;jj++){
-			ofixed_add(&u[jj], u[jj], a[idx(jj,i)]); 
+		//  Flush the vectors u and p. 
+		for(size_t i = 0; i < d; i++){
+			ofixed_import(&u[i],0);
+			ofixed_import(&p[i],0);
 		}
-		ofixed_add(&u[ii+1], u[ii+1], temp_norm); 
+		for(size_t jj = outer+1; jj < d; jj++){
+			ofixed_add(&u[jj], u[jj], a[idx(jj,outer)]); 
+		}
+		ofixed_add(&u[outer+1], u[outer+1], temp_norm); 
 
 		// compute H = 1/2*norm(u)^2. 
 		// a simpler formula is H = norm(x)(norm(x) + x1). 		
-		ofixed_add(&tempH, temp_norm, a[idx(i+1,i)]); 
+		ofixed_add(&tempH, temp_norm, a[idx(outer+1,outer)]); 
 		ofixed_mul(&tempH, temp_norm, tempH, ls->precision); 
 
 		//  compute uscaled = u/H. 
@@ -88,54 +105,82 @@ void tridiag(void *v) {
 				ofixed_add(&p[i], p[i], temp); 
 			}
 		}
-
+		
+		
 		// Compute K.  This part is entirely a dot product. 
 		for (size_t ii = 0; ii < d; ii++){
 			ofixed_mul(&temp, p[ii], uscaled[ii], ls->precision); 
-			ofxied_add(&tempK, temp, tempK); 
+			ofixed_add(&tempK, temp, tempK); 
 		}	
 		// divide by a constant 2. 
+		//printf("divide by 2 \n");        
+
 		obig_shr_native_signed(&temp5, tempK, 1);
        		obig_copy(&tempK, temp5);
 			
+                printf("%d-th iteration K computed from Party %d\n", outer,ocCurrentParty());
 
 		// We will use the memory of p to change it to q in-place.
 		for (size_t ii = 0; ii <d ; ii++){
 			ofixed_mul(&temp, tempK, u[ii], ls->precision);
 			ofixed_sub(&p[ii], p[ii], temp); 
 		}
+		
+
+	        printf("%d-th iteration q computed from Party %d\n", outer,ocCurrentParty());
+
 		// Now p -> q, and we have A = A - qu^T - uq^T. 
-		for(size_t i = 0; i < dd; i++){
-			for(size_t j = 0; j < dd; j++){
-				ofixed_mul(&temp, q[i], u[j], ls->precision);
-				ofixed_sub(&a[idx(i,j)], temp, a[idx(i,j)]);
-				ofixed_mul(&temp, u[i], q[j], ls->precision); 
-				ofixed_sub(&a[idx(i,j)], temp, a[idx(i,j)]); 
+		for(size_t i = 0; i < d; i++){
+			for(size_t j = 0; j <= i; j++){
+				ofixed_mul(&temp, p[i], u[j], ls->precision);
+				ofixed_sub(&a[idx(i,j)],  a[idx(i,j)], temp);
+				ofixed_mul(&temp, u[i], p[j], ls->precision); 
+				ofixed_sub(&a[idx(i,j)], a[idx(i,j)], temp); 
+			        //printf("%d-th iteration final update complete with i = %d, j = %d from Party %d\n", outer,i, j, ocCurrentParty());
 			}
 		}
-		
+		printf("%d-th iteration finished from Party %d\n", outer,ocCurrentParty());		
 	}
-	for (size_t i =0; i < d; i ++){
-		for (size_t j= 0; j < d, j++){
-			ofixed_reveal(ls->beta+d*i+j, a[idx(i,j)],2)); 
+
+	
+	for (size_t i =0; i < d; i++){
+		for (size_t j= 0; j <= i; j++){
+			ofixed_reveal(ls->a.value+idx(i,j), a[idx(i,j)],2); 
 		}
 	}
-	// free all variables
-	ofixed_free(&temp);
-	obig_free(&temp5); 
+	for (size_t i =0; i < d; i++){
+		ofixed_reveal(ls->beta.value + i, u[i], 2); 
+	}
+	
 
-        for (size_t ii = 0; ii < d*d; ii++) {
-                ofixed_free(&a[ii]);
+
+        if(!ocInDebugProto()) {
+                ls->gates = yaoGateCount();
         }
+
+	
+	ofixed_free(&temp);
+	ofixed_free(&tempH);
+	ofixed_free(&tempK);
+	ofixed_free(&temp_norm);
+	obig_free(&temp5);
+		
+	for (size_t ii = 0; ii < d; ii++){
+        	ofixed_free(&beta[ii]);
+        }
+	
+
+
         for (size_t ii = 0; ii < d; ii++) {
                 ofixed_free(&u[ii]);
                 ofixed_free(&uscaled[ii]);
 		ofixed_free(&p[ii]);
         }
-        free(a);
-        free(uscaled);
-        free(u);
-	free(p);
+        //free(a);
+        //free(uscaled);
+        //free(u);
+	//free(p);
+	//free(beta);
         return;
  
 }
