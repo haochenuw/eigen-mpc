@@ -159,22 +159,22 @@ void tridiag(void *v) {
         }
 
 	
-	ofixed_free(&temp);
-	ofixed_free(&tempH);
-	ofixed_free(&tempK);
-	ofixed_free(&temp_norm);
-	obig_free(&temp5);
+	//ofixed_free(&temp);
+	//ofixed_free(&tempH);
+	//ofixed_free(&tempK);
+	//ofixed_free(&temp_norm);
+	//obig_free(&temp5);
 		
-	for (size_t ii = 0; ii < d; ii++){
-        	ofixed_free(&beta[ii]);
-        }
+	//for (size_t ii = 0; ii < d; ii++){
+        //	//ofixed_free(&beta[ii]);
+        //}
 	
 
 
         for (size_t ii = 0; ii < d; ii++) {
-                ofixed_free(&u[ii]);
-                ofixed_free(&uscaled[ii]);
-		ofixed_free(&p[ii]);
+                //ofixed_free(&u[ii]);
+                //ofixed_free(&uscaled[ii]);
+		//ofixed_free(&p[ii]);
         }
         //free(a);
         //free(uscaled);
