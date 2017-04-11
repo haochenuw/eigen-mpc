@@ -5,8 +5,9 @@
 #include "check_error.h"
 
 
-const int precision = 56;
-const int len = 1000000;
+const int precision = 50;
+// length of the vector (to perform a dot product over)
+const int len = 100;
 
 int main(int argc, char **argv) {
 	ProtocolDesc pd;
@@ -29,13 +30,25 @@ int main(int argc, char **argv) {
 	io.p = precision;
 	//io.len = argc - 3;
 	io.len = len;
+
+
 	io.inputs = malloc(io.len * sizeof(fixed_t));
+	io.result =malloc(2*sizeof(fixed_t));
+	//io.inputs = malloc(sizeof(fixed_t)); 
 	for(int i = 0; i < io.len; i++) {
 		double d = (double)rand() / RAND_MAX;
 		// double d;
 		// check(sscanf(argv[i+3], "%lf", &d) == 1, "Error scanning argument number %d.", i+3);
 		io.inputs[i] = double_to_fixed(d, precision);
 	}
+	if (party==1){
+		io.inputs[len-1] = double_to_fixed(-1,precision); 
+	}
+	else{
+		io.inputs[len-1] = double_to_fixed(-2, precision); 
+	}
+
+
 	
 	double time = wallClock();
 	ocTestUtilTcpOrDie(&pd, party==1, argv[1]);
@@ -48,6 +61,9 @@ int main(int argc, char **argv) {
 		printf("Time elapsed: %f\n", wallClock() - time);
 		printf("Number of gates: %d\n", io.gates);
 		printf("Result: %f\n", fixed_to_double(io.result, precision));
+		//printf("Result: %f\n", fixed_to_double(io.result[0], precision));
+		// printf("Result: %f\n", fixed_to_double(io.result[1], precision));
+
 	}
 	free(io.inputs);
 	ret = 0;

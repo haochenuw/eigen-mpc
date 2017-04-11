@@ -27,6 +27,8 @@ void test_fixed(void *v) {
 	ofixed_init(&y);
 	ofixed_init(&t);
 	double start_time = wallClock();
+
+	
 	for(size_t i = 0; i < args->len; i++) {
 		if(i % 1000 == 0 && ocCurrentParty() == 2) {
 			printf("%zd\t%f\n", i, wallClock() - start_time);
@@ -38,6 +40,19 @@ void test_fixed(void *v) {
 		ofixed_add(&c, c, t);
 	}
 	
+	// oblivious givens rotation; 
+	ofixed_import(&c, 0);
+	ofixed_eig2(&c,x,y,t,args->p); 
+
+	// ofixed_sqrt(&c, c, args->p);
+	// ofixed_givens(&c, &t, x, y, args->p); 
+    //obliv fixed_t oute = ofixed_export(e);
+	//obliv fixed_t outf = ofixed_export(f);
+	//revealOblivLLong(&(args->result), oute, 0); 
+	//revealOblivLLong(&(args->result + 1), outf, 0); 
+
+
+
 	obliv fixed_t out = ofixed_export(c);
 	revealOblivLLong(&(args->result), out, 0);
 	args->gates = yaoGateCount();

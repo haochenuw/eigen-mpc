@@ -82,7 +82,7 @@ obliv int8_t ofixed_cmp(ofixed_t a, ofixed_t b) obliv {
 	obliv if(a > b) result = 1;
 	return result;
 #else
-	return obig_cmp(a, b);
+	return obig_cmp_signed(a, b);
 #endif
 	
 }
@@ -310,4 +310,62 @@ void ofixed_reveal(fixed_t *out, ofixed_t a, int party) {
 #else
 	revealOblivLLong(out, temp, party);
 #endif
+}
+
+// eig2(a,b,c) = the closer eigenvalue to c of the matrix (a,b;b,c)
+void ofixed_eig2(ofixed_t *out, ofixed_t a, ofixed_t b, ofixed_t c, size_t p) obliv
+{
+	obig temp1, temp2, temp3, temp4, temp5;
+	~obliv() obig_init(&temp1, FIXED_BIT_SIZE/8);
+	~obliv() obig_init(&temp2, FIXED_BIT_SIZE/8);
+	~obliv() obig_init(&temp3, FIXED_BIT_SIZE/8); 
+	~obliv() obig_init(&temp4, FIXED_BIT_SIZE/8); 	
+    ~obliv() obig_init(&temp5, FIXED_BIT_SIZE/8); 
+	ofixed_sub(&temp1, a,c); 
+	ofixed_mul(&temp1, temp1, temp1, p); 
+	ofixed_mul(&temp2, b,b,p); 
+	~obliv() obig_shl_native_signed(&temp3, temp2, 2); 
+	obig_copy(&temp2, temp3); 
+	ofixed_add(&temp1, temp1, temp2); 
+	ofixed_sqrt(&temp5, temp1, p); 
+
+
+	// Now temp5 = sqrt((a-c)^2 + 4b^2)).  
+	ofixed_add(out,a,c); 
+	// if statement 
+	// if a > c then out = out - temp1; else out = out + temp1; 
+	obliv if(ofixed_cmp(a,c) > 0){
+		ofixed_sub(out, *out, temp5); 
+	}
+	else{
+		ofixed_add(out, *out, temp5); 
+	}
+
+	// Finial division by 2; 
+	~obliv() obig_shr_native_signed(&temp4, *out,1); 
+	obig_copy(out, temp4); 
+
+	~obliv() obig_free(&temp1);
+	~obliv() obig_free(&temp2);
+	~obliv() obig_free(&temp3);
+	~obliv() obig_free(&temp4);
+	~obliv() obig_free(&temp5);
+}
+
+
+// givens(a,b) = a/(sqrt(a^2+b^2)), b/sqrt(a^2+b^2);
+void ofixed_givens(ofixed_t *c, ofixed_t *s, ofixed_t a, ofixed_t b, size_t p) obliv
+{
+    obig temp1; 
+	obig temp2;
+	~obliv() obig_init(&temp1, a.digits + a.digits);
+	~obliv() obig_init(&temp2, b.digits + b.digits);
+    ofixed_mul(&temp1, a, a, p);
+    ofixed_mul(&temp2,b,b,p);
+    ofixed_add(&temp1,temp1, temp2);
+    ofixed_sqrt(&temp1, temp1, p);
+    ofixed_div(c, a, temp1, p);
+    ofixed_div(s, b, temp1, p);
+	~obliv() obig_free(&temp1);
+	~obliv() obig_free(&temp2);
 }

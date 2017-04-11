@@ -21,6 +21,13 @@ obliv bool ofixed_inv(ofixed_t *out, ofixed_t b, size_t p) obliv;
 obliv bool ofixed_div_overflow(ofixed_t *out, ofixed_t a, ofixed_t b, size_t p) obliv;
 void ofixed_sqrt(ofixed_t *out, ofixed_t a, size_t p) obliv;
 
+
+// these functions are needed for diagonalizing a tridiagonal matrix. 
+void ofixed_eig2(ofixed_t *out, ofixed_t a, ofixed_t b, ofixed_t c, size_t p) obliv;
+void ofixed_givens(ofixed_t *c, ofixed_t *s, ofixed_t a, ofixed_t b, size_t p) obliv; 
+
+
+
 // these functions do nothing in 32 bit mode, but are needed for obig
 void ofixed_init(ofixed_t *out);
 void ofixed_free(ofixed_t *out);
