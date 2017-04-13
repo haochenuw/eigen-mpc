@@ -101,3 +101,100 @@ int read_symmetric_linear_system(linear_system_t *ls, ofixed_t *a, ofixed_t *b) 
 		return read_symmetric_linear_system_from_data_providers(ls, a, b);
 	}
 }
+
+
+// Hao: added function for reading tridiagonal matrices. 
+
+int read_tridiagonal_matrix_from_data_providers(tridiagonal_matrix_t *mat, ofixed_t *a, ofixed_t *b) {
+	// This function must only be executed by the parties that run the GC protocol: CSP and Evaluator,
+	// with is'd 1 and 2 and c->party = 0 and 1, respectively.
+	int num_parties = mat->self->num_parties;
+	printf("party %d listening for %d inputs", ocCurrentParty(), num_parties - 2);
+	DualconR* conn = dcrConnect(mat->self);
+	size_t d = mat->diag.len;
+
+	for(int i = 0; i < d; i++) {
+		ofixed_import(&a[i], 0);
+	}
+	for(int i = 0; i < d-1; i++) {
+		ofixed_import(&b[i], 0);
+	}
+	obliv ufixed_t *share_a = malloc(d * sizeof(obliv ufixed_t));
+	obliv ufixed_t *share_b = malloc( (d-1) * sizeof(obliv ufixed_t));
+
+	ofixed_t obigtemp;
+	ofixed_init(&obigtemp);
+	struct timespec time_start, time_end;
+	clock_gettime(CLOCK_MONOTONIC, &time_start);
+	for(int k = 3; k <= num_parties; k++) {
+		printf("%s receiving diagonal from party %d\n", ocCurrentParty()==1?"CSP":"Evaluator",k);
+		dcrRecvIntArray(conn, share_a, d, k);
+		printf("%s received diagonal from party %d\n", ocCurrentParty()==1?"CSP":"Evaluator",k);
+		for(int ij = 0; ij < d; ij++) {
+			ofixed_import(&obigtemp, share_a[ij]);
+			ofixed_add(&a[ij], a[ij], obigtemp);
+		}
+		printf("%s receiving offdiagonal from party %d\n", ocCurrentParty()==1?"CSP":"Evaluator",k);
+		dcrRecvIntArray(conn, share_b, d-1, k);
+		printf("%s received offdiagonal from party %d\n", ocCurrentParty()==1?"CSP":"Evaluator",k);
+		for(int i = 0; i < d-1; i++) {
+			ofixed_import(&obigtemp, share_b[i]);
+			ofixed_add(&b[i], b[i], obigtemp);
+		}
+	}
+	clock_gettime(CLOCK_MONOTONIC, &time_end);
+	if(ocCurrentParty() == 2) printf("Time taken for OT: %f\n", (time_end.tv_sec-time_start.tv_sec)+1e-9*(time_end.tv_nsec-time_start.tv_nsec));
+
+	free(share_a);
+	free(share_b);
+	dcrClose(conn);
+	return 0;
+}
+
+int read_tridiagonal_matrix_from_mat(tridiagonal_matrix_t *mat, ofixed_t *a, ofixed_t *b) {
+	//obliv fixed32_t *mask_a, *mask_b;
+	ofixed_t mask;
+	ofixed_init(&mask);
+
+	size_t d;
+	// check inputs for validity
+	bool valid_self = (mat && (d = mat->diag.len) == mat->offdiag.len +1);
+	bool valid_both = ocBroadcastBool(valid_self, 1) && ocBroadcastBool(valid_self, 2);
+	check(valid_self, "Party %'s inputs are invalid.", ocCurrentParty());
+	check(valid_both, "Party %'s inputs are invalid.", 3 - ocCurrentParty());
+
+	// check if inputs have equal dimensions
+	bool equal;
+	revealOblivBool(&equal,
+		feedOblivInt(d, 1) ==
+		feedOblivInt(d, 2), 0);
+	check(equal, "Inputs of the two parties differ.");
+
+	for(size_t i = 0; i < d; i++) {
+		ofixed_import(&mask, feedOblivLLong(mat->diag.value[i], 2));
+		ofixed_import(&a[i], feedOblivLLong(mat->diag.value[i], 1));
+		ofixed_add(&a[i], a[i], mask);
+	}
+
+	for(size_t i = 0; i < d - 1; i++){
+		ofixed_import(&mask, feedOblivLLong(mat->offdiag.value[i], 2));
+		ofixed_import(&b[i], feedOblivLLong(mat->offdiag.value[i], 1));
+		ofixed_add(&b[i], b[i], mask);
+	}
+	ofixed_free(&mask);
+	return 0;
+
+error:
+	//obig_free(&mask);
+	return -1;
+}
+
+int read_tridiagonal_matrix(tridiagonal_matrix_t *mat, ofixed_t *a, ofixed_t *b) {
+	// This distinction is to maintain compatibility to our tests of phase 2 only
+	if(!mat->self){
+		return read_tridiagonal_matrix_from_mat(mat, a, b);
+	} else {
+		return read_tridiagonal_matrix_from_data_providers(mat, a, b);
+	}
+}
+

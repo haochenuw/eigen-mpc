@@ -7,6 +7,7 @@
 #include "check_error.h"
 #include "input.h"
 #include "tridiag.h"
+#include "qrtrd.h"
 int precision = 54;
 
 int read_ls_from_file(int party, const char *filepath, linear_system_t *ls) {

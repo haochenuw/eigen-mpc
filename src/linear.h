@@ -23,6 +23,15 @@ typedef struct {
 	node *self; // for reading input from data providers
 } linear_system_t;
 
+typedef struct{
+	vector_t diag; 
+	vector_t offdiag;
+	int precision; 
+	long long gates; 
+	node *self; 
+} tridiagonal_matrix_t;
+
+
 // helper function that maps indices into a symmetric matrix
 // to an index into a one-dimensional array
 size_t idx(size_t i, size_t j);
