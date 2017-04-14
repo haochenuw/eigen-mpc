@@ -38,7 +38,7 @@ $(binDir)/main: $(objDir)/main.o $(objDir)/secure_multiplication/node.o $(objDir
 $(binDir)/secure_multiplication:$(objDir)/secure_multiplication/secure_multiplication.pb-c.o $(objDir)/secure_multiplication/secure_multiplication.o $(objDir)/secure_multiplication/config.o $(objDir)/secure_multiplication/node.o $(objDir)/linear.o $(objDir)/fixed.o $(objDir)/secure_multiplication/phase1.o $(objDir)/util.o
 	$(link_obliv) -lprotobuf-c -lm
 
-$(binDir)/test_linear_system: $(ackLib) $(call native,test/test_linear_system) $(call both,linear) $(call both,fixed) $(call native,util) $(call obliv,ldlt) $(call obliv,cholesky) $(call obliv,cgd) $(call native,input) $(call obliv,tridiag)
+$(binDir)/test_linear_system: $(ackLib) $(call native,test/test_linear_system) $(call both,linear) $(call both,fixed) $(call native,util) $(call obliv,ldlt) $(call obliv,cholesky) $(call obliv,cgd) $(call native,input) $(call obliv,tridiag) $(call obliv,qrtrd)
 	$(link_obliv)
 
 $(binDir)/test_fixed: $(call both,test/test_fixed) $(call both,fixed) $(call native,util)

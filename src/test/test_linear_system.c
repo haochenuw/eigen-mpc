@@ -10,6 +10,67 @@
 #include "qrtrd.h"
 int precision = 54;
 
+int read_tridiag_mat_from_file(int party, const char *filepath, tridiagonal_matrix_t *mat) {
+	FILE *file = NULL;
+	int res;
+	vector_t diag, diag_mask;
+	vector_t offdiag, offdiag_mask;
+	diag.value = diag_mask.value = offdiag.value = offdiag_mask.value = NULL;
+
+	check(mat && filepath, "Arguments may not be null.");
+	file = fopen(filepath, "r");
+	//check(file, "Could not open file: %s.", strerror(errno));
+
+	
+	printf("start reading input \n");
+	// Read linear system from file
+	res = read_vector(file, &diag, precision, false, 0);
+	check(!res, "Could not read diagonal.");
+	res = read_vector(file, &offdiag, precision, false, 0);
+	check(!res, "Could not read offdiagonal.");
+
+	// generate random masks
+	diag_mask.value = calloc(diag.len , sizeof(fixed_t));
+	offdiag_mask.value = calloc(offdiag.len , sizeof(fixed_t));
+	diag_mask.len = diag.len;
+	offdiag_mask.len = offdiag.len;
+
+	for(size_t i = 0; i < diag.len; i++) {
+		diag_mask.value[i] = 123456; // Of course in a real application random masks would be used
+		diag.value[i] = (uint64_t) diag.value[i] - (uint64_t) diag_mask.value[i];
+	}
+	for(size_t i =0; i < offdiag.len; i++){		//if(party==2)printf("\n");
+		offdiag_mask.value[i] = 0xDEADBEEF;
+		offdiag.value[i] = (uint64_t) offdiag.value[i] - (uint64_t) offdiag_mask.value[i];
+	}
+	printf("read file got here \n"); 
+
+	fclose(file);
+	file = NULL;
+
+	// Construct instance ls
+	mat->precision = precision;
+	mat->self = NULL;
+	if(party != 1) {
+		mat->diag = diag;
+		mat->offdiag = offdiag;
+		free(diag_mask.value);
+		free(offdiag_mask.value);
+	} else {
+		mat->diag = diag_mask;
+		mat->offdiag = offdiag_mask;
+		//ls->beta.value = malloc( A_mask.d[1]*(A_mask.d[1] + 1)/2*sizeof(fixed_t));
+		//ls->beta.value = malloc(A_mask.d[1]*sizeof(fixed_t));
+		//ls->beta.len = A_mask.d[1]*(A_mask.d[1]+1)/2;
+		free(diag.value);
+		free(offdiag.value);
+	}
+	return 0;
+
+error:	
+	return 1;
+}
+
 int read_ls_from_file(int party, const char *filepath, linear_system_t *ls) {
 	FILE *file = NULL;
 	int res;
@@ -100,23 +161,27 @@ int main(int argc, char **argv) {
 	}
 	check(party > 0, "Party must be either 1 or 2.");
 
-	linear_system_t ls;
-	read_ls_from_file(party, argv[3], &ls);
-	if(!strcmp(algorithm, "cgd")){
-	       ls.num_iterations = atoi(argv[5]);
-	} else {
-	       ls.num_iterations = 0;
-	}
+	tridiagonal_matrix_t mat; 
+	printf("got here \n");
+	//linear_system_t ls;
+	read_tridiag_mat_from_file(party, argv[3], &mat);
+	//if(!strcmp(algorithm, "cgd")){
+	//       ls.num_iterations = atoi(argv[5]);
+	//} else {
+	//       ls.num_iterations = 0;
+	//}
+	printf("matrix read from party %d \n", party);
 
 	ProtocolDesc pd;
 	ocTestUtilTcpOrDie(&pd, party==1, argv[1]);
 	setCurrentParty(&pd, party);
 
 	double time = wallClock();
-	if(party == 2) {
-	      printf("\n");
-	      printf("Algorithm: %s\n", algorithm);
-	}
+	//if(party == 2) {
+	//      printf("\n");
+	//      printf("Algorithm: %s\n", algorithm);
+	//}
+	/*
 	void (*algorithms[])(void *) = {cholesky, ldlt, cgd};
 	int alg_index;
 	if(!strcmp(algorithm, "cholesky")) {
@@ -126,26 +191,31 @@ int main(int argc, char **argv) {
 	} else {
 	      alg_index = 2;
 	}
+	*/
 
 
-        execYaoProtocol(&pd, tridiag, &ls);
+    execYaoProtocol(&pd, qrtrd, &mat);
 	//execYaoProtocol(&pd, algorithms[alg_index], &ls);
 	//execDebugProtocol(&pd, algorithms[alg_index], &ls);
 
 	if(party == 2) {
 	  //check(ls.beta.len == d, "Computation error.");
 	  printf("Time elapsed: %f\n", wallClock() - time);
-	  printf("Number of gates: %lld\n", ls.gates);
-	  printf("Vector u: ");
-	  for(size_t i = 0; i < ls.beta.len; i++) {
-	    printf("%20.15f ", fixed_to_double(ls.beta.value[i], precision));
+	  printf("Number of gates: %lld\n", mat.gates);
+	  printf("Final diagonal : ");
+	  for(size_t i = 0; i < mat.diag.len; i++) {
+	    printf("%20.15f ", fixed_to_double(mat.diag.value[i], precision));
 	  }
 	  printf("\n");
-          printf("Matrix A: ");
-	  for(size_t i = 0; i < ls.beta.len; i++) {
-		for (size_t j = 0; j <= i; j++){
-	  		printf("%20.15f ", fixed_to_double(ls.a.value[idx(i,j)], precision)); 
-		}  
+      
+      printf("Final offdiagonal: ");
+	  //for(size_t i = 0; i < mat.offdiag.len; i++) {
+	  //	for (size_t j = 0; j <= i; j++){
+	  //		printf("%20.15f ", fixed_to_double(ls.a.value[idx(i,j)], precision)); 
+	   //	}  
+	  //}
+  	  for(size_t i = 0; i < mat.offdiag.len; i++) {
+	    printf("%20.15f ", fixed_to_double(mat.offdiag.value[i], precision));
 	  }
 	  printf("\n");
 	}

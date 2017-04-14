@@ -1,0 +1,140 @@
+#include <obliv.oh>
+#include "linear.h"
+#include "linear.oh"
+#include "fixed.h"
+#include "fixed.oh"
+#include <stdio.h>
+#include "util.h"
+#include "qrtrd.h"
+
+
+
+// entries, generated while we perform the row givens rotations. The super-super-diagonal 
+// entries are stored in-place using the off-diagonal array e. We note that e has length one more 
+// than what's required, so after the row rotations, we keep the invariant that e[d-1] = 0. 
+
+
+void qrtrd(void *v)
+{
+	const int maxiter = 4; 
+
+	tridiagonal_matrix_t* mat = v; 
+	size_t d = mat->diag.len;
+	int prec = mat->precision;
+	// initializing diagonal and off-diagonal. 
+	ofixed_t *diag = malloc(d*sizeof(ofixed_t));
+	ofixed_t *offdiag = malloc(d*sizeof(ofixed_t));
+
+	// initializing the c and s vectors to store the givens rotations. 
+	ofixed_t *c = malloc(d*sizeof(ofixed_t)); 
+	ofixed_t *s = malloc(d*sizeof(ofixed_t));
+
+
+	for (size_t ii = 0; ii < d; ii++) {
+		ofixed_init(&diag[ii]);
+		ofixed_init(&c[ii]);
+        	ofixed_init(&s[ii]);
+        	// the d-th element of offdiag is a placeholder we will use later.
+        	ofixed_init(&offdiag[ii]);
+	}
+
+
+	ofixed_t shift, temp1, temp2, temp3, temp4; 
+	ofixed_init(&shift);
+        ofixed_init(&temp1);
+        ofixed_init(&temp2);
+        ofixed_init(&temp3);
+        ofixed_init(&temp4);
+
+
+	if(read_tridiagonal_matrix(mat, diag, offdiag)) {
+    		fprintf(stderr, "Could not read inputs.");
+    		mat->diag.len = -1;
+   		free(diag);
+    		free(offdiag);
+    		return;
+   	}
+
+	// shift the offdiagonal vector 
+	for(size_t i = d-1 ; i>0; i--){
+		ofixed_copy(&offdiag[i], offdiag[i-1]);
+	}
+
+	for (size_t m = d; m >= 2; m--)
+	{
+		for (size_t j = 0; j< maxiter; j++)
+			{
+				// Wilkinson shift. 
+				ofixed_eig2(&shift, diag[m-2], offdiag[m-1], diag[m-1], prec); 
+				// subtract by identity*shift. 
+				for(size_t k = 0; k < m; k++)
+				{
+					ofixed_sub(&diag[k],  diag[k], shift); 
+				}
+				// Givens (row) rotations
+				// TODO change this so that it does not use superdiagonal. 
+				for (size_t i = 0; i < m-1; i++){
+					ofixed_givens(&c[i], &s[i], diag[i], offdiag[i+1], prec);
+					// 2-by-3 matrix multiplication when i < m-2. 2-by-2 when i = m-2. 
+					// first column. update diag[i]
+					ofixed_mul(&temp1, diag[i], c[i], prec);
+					ofixed_mul(&temp2, offdiag[i+1], s[i], prec); 
+					ofixed_add(&diag[i], temp1, temp2);
+						
+					// second column. update diag[i+1] and superdiag[i].
+					ofixed_mul(&temp1, offdiag[i], c[i], prec);	
+					ofixed_mul(&temp2, diag[i+1], s[i], prec);
+					ofixed_add(&temp3, temp2, temp1);
+						
+					ofixed_mul(&temp1, diag[i+1], c[i], prec);
+                        		ofixed_mul(&temp2, offdiag[i], s[i], prec);
+                        		ofixed_sub(&temp4, temp1, temp2); 
+                        		
+					ofixed_copy(&offdiag[i], temp3);
+					ofixed_copy(&diag[i+1], temp4);  
+					ofixed_import(&temp3, 0);    
+ 					ofixed_import(&temp4, 0);
+
+						
+					if (i < m-2){
+						ofixed_mul(&offdiag[i+1], offdiag[i+2], c[i], prec); 
+					}
+				}
+
+				// Givens coloum rotations
+				for (size_t i = 0; i < m-1; i++){
+					// matrix (column) multiplication
+					// a similar thing as above 
+					ofixed_mul(&temp1, diag[i],  c[i], prec);
+					ofixed_mul(&temp2, offdiag[i], s[i], prec); 
+					ofixed_add(&diag[i], temp1, temp2);
+					ofixed_mul(&offdiag[i], diag[i+1], s[i], prec);
+					ofixed_mul(&diag[i+1],  diag[i+1], c[i], prec);
+				}
+				
+				// shift the off-diagonal to the right. 
+				        // shift the offdiagonal vector
+        			for(size_t i = m-1 ; i>0; i--){
+                			ofixed_copy(&offdiag[i], offdiag[i-1]);
+        			}
+
+				// adding the shift back onto the main diagonal.  
+				for(size_t k = 0; k < m; k++)
+				{
+					ofixed_add(&diag[k], diag[k], shift); 
+				}
+		}
+	}
+	// TODO: reveal the final A matrix. 
+	for (size_t i=0; i < d; i++ ){
+    		ofixed_reveal(mat->diag.value+i, diag[i],2); 
+   	}
+    	for (size_t i =0; i < d-1; i++){
+		ofixed_reveal(mat->offdiag.value+i, offdiag[i+1], 2); 
+    	}
+	
+	if(!ocInDebugProto()) {
+    		mat->gates = yaoGateCount();
+   	 }
+   	 return; 
+}
