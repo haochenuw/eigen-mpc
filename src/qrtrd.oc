@@ -9,10 +9,6 @@
 
 
 
-// entries, generated while we perform the row givens rotations. The super-super-diagonal 
-// entries are stored in-place using the off-diagonal array e. We note that e has length one more 
-// than what's required, so after the row rotations, we keep the invariant that e[d-1] = 0. 
-
 
 void qrtrd(void *v)
 {
@@ -50,7 +46,7 @@ void qrtrd(void *v)
 	if(read_tridiagonal_matrix(mat, diag, offdiag)) {
     		fprintf(stderr, "Could not read inputs.");
     		mat->diag.len = -1;
-   		free(diag);
+   			free(diag);
     		free(offdiag);
     		return;
    	}

@@ -198,3 +198,76 @@ int read_tridiagonal_matrix(tridiagonal_matrix_t *mat, ofixed_t *a, ofixed_t *b)
 	}
 }
 
+
+// Hao: newly added unction for reading real symmetrix matrices. 
+
+int read_symmetric_matrix_from_data_providers(symmetric_matrix_t *mat, ofixed_t *a) {
+	// This function must only be executed by the parties that run the GC protocol: CSP and Evaluator,
+	// with is'd 1 and 2 and c->party = 0 and 1, respectively.
+	int num_parties = mat->self->num_parties;
+	printf("party %d listening for %d inputs", ocCurrentParty(), num_parties - 2);
+	DualconR* conn = dcrConnect(mat->self);
+	size_t d = mat->d;
+
+	for(int i = 0; i < d*(d+1)/2; i++) {
+		ofixed_import(&a[i], 0);
+	}
+
+	obliv ufixed_t *share_a = malloc(d*(d+1)/2 * sizeof(obliv ufixed_t));
+
+	ofixed_t obigtemp;
+	ofixed_init(&obigtemp);
+	struct timespec time_start, time_end;
+	clock_gettime(CLOCK_MONOTONIC, &time_start);
+	for(int k = 3; k <= num_parties; k++) {
+		printf("%s receiving diagonal from party %d\n", ocCurrentParty()==1?"CSP":"Evaluator",k);
+		dcrRecvIntArray(conn, share_a, d, k);
+		printf("%s received diagonal from party %d\n", ocCurrentParty()==1?"CSP":"Evaluator",k);
+		for(int ij = 0; ij < d*(d+1)/2; ij++) {
+			ofixed_import(&obigtemp, share_a[ij]);
+			ofixed_add(&a[ij], a[ij], obigtemp);
+		}
+	}
+	clock_gettime(CLOCK_MONOTONIC, &time_end);
+	if(ocCurrentParty() == 2) printf("Time taken for OT: %f\n", (time_end.tv_sec-time_start.tv_sec)+1e-9*(time_end.tv_nsec-time_start.tv_nsec));
+
+	free(share_a);
+	dcrClose(conn);
+	return 0;
+}
+
+int read_symmetric_matrix_from_mat(symmetric_matrix_t *mat, ofixed_t *a) {
+	//obliv fixed32_t *mask_a, *mask_b;
+	ofixed_t mask;
+	ofixed_init(&mask);
+	size_t d = mat->d;
+
+	// check if inputs have equal dimensions
+	bool equal;
+	revealOblivBool(&equal,
+		feedOblivInt(d, 1) ==
+		feedOblivInt(d, 2), 0);
+	check(equal, "Inputs of the two parties differ.");
+
+	for(size_t i = 0; i < d*(d+1)/2; i++) {
+		ofixed_import(&mask, feedOblivLLong(mat->value[i], 2));
+		ofixed_import(&a[i], feedOblivLLong(mat->value[i], 1));
+		ofixed_add(&a[i], a[i], mask);
+	}
+	ofixed_free(&mask);
+	return 0;
+
+error:
+	//obig_free(&mask);
+	return -1;
+}
+
+int read_symmetric_matrix(symmetric_matrix_t *mat, ofixed_t *a) {
+	// This distinction is to maintain compatibility to our tests of phase 2 only
+	if(!mat->self){
+		return read_symmetric_matrix_from_mat(mat, a);
+	} else {
+		return read_symmetric_matrix_from_data_providers(mat, a);
+	}
+}
+

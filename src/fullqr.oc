@@ -1,0 +1,252 @@
+#include <obliv.oh>
+#include "linear.h"
+#include "linear.oh"
+#include "fixed.h"
+#include "fixed.oh"
+#include <stdio.h>
+#include "util.h"
+#include "fullqr.h"
+
+/* Full QR reduction algorithm on a real symmetric matrix. 
+
+Input: a symmetric matrix A, given as a symmetric_matrix_t instance. 
+
+Output: a vector of eigenvalues of A, written in A.eigenvalues. 
+
+TODO: add eigenvectors. 
+*/
+void fullqr(void *v)
+{
+	symmetric_matrix_t *mat = v;
+	
+	size_t d = mat->d; 
+	ofixed_t *a = malloc(((d * (d+1)) / 2) * sizeof(ofixed_t));
+	for (size_t ii = 0; ii < d*(d+1)/2; ii++){
+		ofixed_init(&a[ii]);
+	}
+
+	// todo: implement read_symmetric_matrix.
+    if(read_symmetric_matrix(mat, a)) {
+        fprintf(stderr, "Could not read inputs.");
+        mat->eigenvalues.len = -1;
+        free(a);
+        return;
+    }
+
+    // these temporary vectors are used in tridiag.
+	ofixed_t *u = malloc(d*sizeof(ofixed_t));
+	ofixed_t *uscaled = malloc(d*sizeof(ofixed_t)); 
+	ofixed_t *p = malloc(d*sizeof(ofixed_t));
+	for (size_t ii =0; ii < d; ii++)
+	{
+		ofixed_init(&u[ii]);
+		ofixed_init(&uscaled[ii]);
+		ofixed_init(&p[ii]);
+	}
+
+	int prec = mat->precision;
+
+	ofixed_t temp;
+    ofixed_init(&temp);
+	ofixed_t temp_norm;
+	ofixed_init(&temp_norm); 
+	ofixed_t tempH;
+    ofixed_init(&tempH);
+	ofixed_t tempK;
+    ofixed_init(&tempK);
+    ofixed_t temp0;
+    ofixed_init(&temp0);
+    obig  temp5;
+    ~obliv() obig_init(&temp5, prec);
+
+
+    // allocate output vector if not already done and we are party 2
+    if(!(mat->eigenvalues.value) && ocCurrentParty() == 2) {
+    	mat->eigenvalues.len = d ;
+    	mat->eigenvalues.value = malloc(d * sizeof(uint64_t));
+    }
+
+    // if(ocCurrentParty() == 2) {printf("OT time: %f\n", wallClock() - time_start);}
+
+	// The Householder reduction 
+	for (size_t outer = 0; outer < d-2; outer ++)
+	{
+		ofixed_import(&temp_norm,0); 
+		ofixed_import(&tempH, 0);
+		ofixed_import(&tempK, 0);
+		// compute the norm of the i-th sub-column. 
+		for(size_t j = outer +1; j < d; j++){
+			ofixed_mul(&temp, a[idx(j,outer)], a[idx(j,outer)], prec);			ofixed_add(&temp_norm, temp, temp_norm); 
+		}
+		ofixed_sqrt(&temp_norm, temp_norm, prec);
+
+		//  Flush the vectors u and p. 
+		for(size_t i = 0; i < d; i++){
+			ofixed_import(&u[i],0);
+			ofixed_import(&p[i],0);
+		}
+		for(size_t jj = outer+1; jj < d; jj++){
+			ofixed_add(&u[jj], u[jj], a[idx(jj,outer)]); 
+		}
+		ofixed_add(&u[outer+1], u[outer+1], temp_norm); 
+
+		// compute H = 1/2*norm(u)^2. 
+		// a simpler formula is H = norm(x)(norm(x) + x1). 		
+		ofixed_add(&tempH, temp_norm, a[idx(outer+1,outer)]); 
+		ofixed_mul(&tempH, temp_norm, tempH, prec); 
+
+		//  compute uscaled = u/H. 
+		for (size_t k = 0; k < d; k++){
+			ofixed_div(&uscaled[k], u[k], tempH, prec); 
+		}
+		// Matrix multiplication. Computing  p = A*uscaled.
+		for (size_t i =0; i < d; i++){
+			for(size_t j =0; j < d; j++){
+				ofixed_mul(&temp, a[idx(i,j)], uscaled[j], prec); 
+				ofixed_add(&p[i], p[i], temp); 
+			}
+		}
+		
+		
+		// Compute K.  This part is entirely a dot product. 
+		for (size_t ii = 0; ii < d; ii++){
+			ofixed_mul(&temp, p[ii], uscaled[ii], prec); 
+			ofixed_add(&tempK, temp, tempK); 
+		}	
+		// divide by a constant 2. 
+		//printf("divide by 2 \n");        
+
+		obig_shr_native_signed(&temp5, tempK, 1);
+   		obig_copy(&tempK, temp5);
+			
+        printf("%d-th iteration K computed from Party %d\n", outer,ocCurrentParty());
+
+		// We will use the memory of p to change it to q in-place.
+		for (size_t ii = 0; ii <d ; ii++){
+			ofixed_mul(&temp, tempK, u[ii], prec);
+			ofixed_sub(&p[ii], p[ii], temp); 
+		}
+		
+
+	        printf("%d-th iteration q computed from Party %d\n", outer,ocCurrentParty());
+
+		// Now p -> q, and we have A = A - qu^T - uq^T. 
+		for(size_t i = 0; i < d; i++){
+			for(size_t j = 0; j <= i; j++){
+				ofixed_mul(&temp, p[i], u[j], prec);
+				ofixed_sub(&a[idx(i,j)],  a[idx(i,j)], temp);
+				ofixed_mul(&temp, u[i], p[j], prec); 
+				ofixed_sub(&a[idx(i,j)], a[idx(i,j)], temp); 
+			        //printf("%d-th iteration final update complete with i = %d, j = %d from Party %d\n", outer,i, j, ocCurrentParty());
+			}
+		}
+		printf("%d-th iteration finished from Party %d\n", outer,ocCurrentParty());		
+	}
+
+	// Phase 2: qrtrd
+	const int maxiter = 4; 
+
+
+    // these temporary vectors are used in qrtrd.
+	// initializing the c and s vectors to store the givens rotations. 
+	ofixed_t *c = malloc(d*sizeof(ofixed_t)); 
+	ofixed_t *s = malloc(d*sizeof(ofixed_t));
+	ofixed_t *diag = malloc(d*sizeof(ofixed_t));
+	ofixed_t *offdiag = malloc(d*sizeof(ofixed_t)); 
+	for (size_t ii =0; ii < d; ii++)
+	{
+		ofixed_init(&diag[ii]);
+		ofixed_init(&offdiag[ii]);
+		ofixed_init(&c[ii]);
+    	ofixed_init(&s[ii]);
+		ofixed_copy(&diag[ii], a[idx(ii,ii)]); 
+		if(ii == 0){
+			ofixed_copy(&offdiag[ii], a[idx(1,0)]);
+		}
+		else{
+			ofixed_copy(&offdiag[ii],a[idx(ii,ii-1)]); 
+		}
+	}
+
+	ofixed_t shift, temp1, temp2, temp3, temp4; 
+	ofixed_init(&shift);
+    ofixed_init(&temp1);
+    ofixed_init(&temp2);
+    ofixed_init(&temp3);
+    ofixed_init(&temp4);
+
+
+	for (size_t m = d; m >= 2; m--)
+	{
+		for (size_t j = 0; j< maxiter; j++)
+			{
+				// Wilkinson shift. 
+				ofixed_eig2(&shift, diag[m-2], offdiag[m-1], diag[m-1], prec); 
+				// subtract by identity*shift. 
+				for(size_t k = 0; k < m; k++)
+				{
+					ofixed_sub(&diag[k],  diag[k], shift); 
+				}
+				// Givens (row) rotations
+				for (size_t i = 0; i < m-1; i++){
+					ofixed_givens(&c[i], &s[i], diag[i], offdiag[i+1], prec);
+					// 2-by-3 matrix multiplication when i < m-2. 2-by-2 when i = m-2. 
+					// first column. update diag[i]
+					ofixed_mul(&temp1, diag[i], c[i], prec);
+					ofixed_mul(&temp2, offdiag[i+1], s[i], prec); 
+					ofixed_add(&diag[i], temp1, temp2);
+						
+					// second column. update diag[i+1] and superdiag[i].
+					ofixed_mul(&temp1, offdiag[i], c[i], prec);	
+					ofixed_mul(&temp2, diag[i+1], s[i], prec);
+					ofixed_add(&temp3, temp2, temp1);
+						
+					ofixed_mul(&temp1, diag[i+1], c[i], prec);
+                        		ofixed_mul(&temp2, offdiag[i], s[i], prec);
+                        		ofixed_sub(&temp4, temp1, temp2); 
+                        		
+					ofixed_copy(&offdiag[i], temp3);
+					ofixed_copy(&diag[i+1], temp4);  
+					ofixed_import(&temp3, 0);    
+ 					ofixed_import(&temp4, 0);
+
+					if (i < m-2){
+						ofixed_mul(&offdiag[i+1], offdiag[i+2], c[i], prec); 
+					}
+				}
+
+				// Givens coloum rotations
+				for (size_t i = 0; i < m-1; i++){
+					// matrix (column) multiplication
+					// similar as above 
+					ofixed_mul(&temp1, diag[i],  c[i], prec);
+					ofixed_mul(&temp2, offdiag[i], s[i], prec); 
+					ofixed_add(&diag[i], temp1, temp2);
+					ofixed_mul(&offdiag[i], diag[i+1], s[i], prec);
+					ofixed_mul(&diag[i+1],  diag[i+1], c[i], prec);
+				}
+				
+				// rotate the off-diagonal to the right, leaving first entry unchanged.
+    			for(size_t i = m-1 ; i>0; i--){
+    				ofixed_copy(&offdiag[i], offdiag[i-1]);
+        		}
+
+				// adding the shift back onto the main diagonal.  
+				for(size_t k = 0; k < m; k++)
+				{
+					ofixed_add(&diag[k], diag[k], shift); 
+				}
+		}
+	}
+
+	// Final stage: reveal the eigenvalues.
+
+	for (size_t i=0; i < d; i++ ){
+    	ofixed_reveal(mat->eigenvalues.value+i, diag[i],2); 
+   	}
+	
+	if(!ocInDebugProto()) {
+    		mat->gates = yaoGateCount();
+   	}
+   	return; 
+}

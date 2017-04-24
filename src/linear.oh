@@ -6,3 +6,5 @@
 int read_symmetric_linear_system(linear_system_t *ls, ofixed_t *a, ofixed_t *b);
 
 int read_tridiagonal_matrix(tridiagonal_matrix_t *mat, ofixed_t *diag, ofixed_t *offdiag);
+
+int read_symmetric_matrix(symmetric_matrix_t *mat, ofixed_t *a);

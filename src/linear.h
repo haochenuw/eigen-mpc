@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include "fixed.h"
 #include "secure_multiplication/node.h"
-
 typedef struct {
 	size_t d[2];
 	fixed_t *value;
@@ -22,6 +21,16 @@ typedef struct {
 	int num_iterations; // for cgd
 	node *self; // for reading input from data providers
 } linear_system_t;
+
+typedef struct {
+	size_t d; 
+	fixed_t *value; 
+	vector_t eigenvalues;
+	int precision; 
+	long long gates;
+	node *self;
+} symmetric_matrix_t;
+
 
 typedef struct{
 	vector_t diag; 

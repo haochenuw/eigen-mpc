@@ -8,6 +8,7 @@
 #include "input.h"
 #include "tridiag.h"
 #include "qrtrd.h"
+#include "fullqr.h"
 int precision = 54;
 
 int read_tridiag_mat_from_file(int party, const char *filepath, tridiagonal_matrix_t *mat) {
