@@ -24,6 +24,8 @@ fixed_t inner_product(vector_t *vector_1, vector_t *vector_2){
 }
 
 
+
+
 int read_matrix(FILE *file, matrix_t *matrix, int precision,
 		bool normalize, double normalizer) {
 	int n, m, res;
@@ -64,6 +66,41 @@ error:
 	}
 	return 1;	
 }
+
+
+int read_sym_mat(FILE *file, symmetric_matrix_t *matrix, int precision) {
+	int n, res;
+	check(matrix && file, "Arguments may not be null.");
+	matrix->value = NULL;
+
+	res = fscanf(file, "%d", &n);
+	check(res == 1, "fscanf: %s.", strerror(errno));
+
+	matrix->d = n;
+	matrix->value = malloc(n*(n+1)/2*sizeof(fixed_t));
+
+	// printf("A = \n");
+	for(size_t i = 0; i < n; i++) {
+		for(size_t j = 0; j <= i; j++) {
+			double val;
+			res = fscanf(file, "%lf", &val);
+			check(res == 1, "fscanf: %s.", strerror(errno));
+			matrix->value[idx(i,j)] = double_to_fixed(val, precision);
+			//printf("%3.8f ", val);
+		}
+		//printf("\n");
+	}
+	return 0;
+	
+error:
+	if(matrix) {
+		matrix->d = 0;
+		free(matrix->value);
+		matrix->value = NULL;
+	}
+	return 1;	
+}
+
 
 int read_vector(FILE *file, vector_t *vector,
 		int precision, bool normalize, double normalizer) {

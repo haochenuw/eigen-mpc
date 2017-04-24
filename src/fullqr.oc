@@ -119,7 +119,7 @@ void fullqr(void *v)
 		obig_shr_native_signed(&temp5, tempK, 1);
    		obig_copy(&tempK, temp5);
 			
-        printf("%d-th iteration K computed from Party %d\n", outer,ocCurrentParty());
+        	//printf("%d-th iteration K computed from Party %d\n", outer,ocCurrentParty());
 
 		// We will use the memory of p to change it to q in-place.
 		for (size_t ii = 0; ii <d ; ii++){
@@ -128,7 +128,7 @@ void fullqr(void *v)
 		}
 		
 
-	        printf("%d-th iteration q computed from Party %d\n", outer,ocCurrentParty());
+	        // printf("%d-th iteration q computed from Party %d\n", outer,ocCurrentParty());
 
 		// Now p -> q, and we have A = A - qu^T - uq^T. 
 		for(size_t i = 0; i < d; i++){
@@ -140,7 +140,7 @@ void fullqr(void *v)
 			        //printf("%d-th iteration final update complete with i = %d, j = %d from Party %d\n", outer,i, j, ocCurrentParty());
 			}
 		}
-		printf("%d-th iteration finished from Party %d\n", outer,ocCurrentParty());		
+		printf("%d-th iteration finished from Party %d\n", outer+1, ocCurrentParty());		
 	}
 
 	// Phase 2: qrtrd
@@ -236,6 +236,10 @@ void fullqr(void *v)
 				{
 					ofixed_add(&diag[k], diag[k], shift); 
 				}
+		}
+		if (ocCurrentParty() == 2)
+		{
+			printf("phase 2 one iteration  done  \n"); 
 		}
 	}
 

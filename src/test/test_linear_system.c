@@ -11,6 +11,59 @@
 #include "fullqr.h"
 int precision = 54;
 
+// FIXME: do we need a new function, which reads a symmetric matrix? 
+int read_sym_mat_from_file(int party, const char *filepath, symmetric_matrix_t *mat) {
+	FILE *file = NULL;
+	int res;
+	symmetric_matrix_t a, a_mask;
+	a.value = a_mask.value = NULL;
+
+	check(mat && filepath, "Arguments may not be null.");
+	file = fopen(filepath, "r");
+	//check(file, "Could not open file: %s.", strerror(errno));
+
+	
+	// Read linear system from file
+	res = read_sym_mat(file, &a, precision);
+	check(!res, "Could not read matrix.");
+
+	// generate random masks
+	a_mask.value = calloc(a.d*(a.d+1)/2, sizeof(fixed_t));
+	a_mask.d = a.d;
+
+	for(size_t i = 0; i < a.d; i++) {
+		for (size_t j = 0; j <= i; j++){
+			a_mask.value[i] = 123456; // Of course in a real application random masks would be used
+			a.value[idx(i,j)] = (uint64_t) a.value[idx(i,j)] - (uint64_t) a_mask.value[idx(i,j)];
+		}
+	}
+
+	fclose(file);
+	file = NULL;
+
+	// Construct symmetric_matrix_t instance
+	mat->precision = precision;
+	mat->self = NULL;
+	if(party != 1) {
+		mat->d = a.d;
+		mat->value = a.value;
+		free(a_mask.value);
+	} else {
+		mat->d = a_mask.d;
+		mat->value = a_mask.value;
+		mat->eigenvalues.value = malloc(a.d * (a.d+1)/2 *sizeof(fixed_t));
+		mat->eigenvalues.len = a.d;
+		//ls->beta.value = malloc( A_mask.d[1]*(A_mask.d[1] + 1)/2*sizeof(fixed_t));
+		//ls->beta.value = malloc(A_mask.d[1]*sizeof(fixed_t));
+		//ls->beta.len = A_mask.d[1]*(A_mask.d[1]+1)/2;
+		free(a.value);
+	}
+	return 0;
+
+error:	
+	return 1;
+}
+
 int read_tridiag_mat_from_file(int party, const char *filepath, tridiagonal_matrix_t *mat) {
 	FILE *file = NULL;
 	int res;
@@ -145,13 +198,14 @@ error:	// for some reason, oblivc removes this label if the stuff
 
 
 int main(int argc, char **argv) {
-	check(argc != 6, "Usage: %s [Port] [Party] [Input file] [Algorithm] [Num. iterations CGD] [Precision]", argv[0]);
-	char *algorithm = argv[4];
-	check(!strcmp(algorithm, "cholesky") || !strcmp(algorithm, "ldlt")  || !strcmp(algorithm, "cgd"),
-	      "Algorithm must be cholesky, ldlt, or cgd.");
+	check(argc != 4, "Usage: %s [Port] [Party] [Input file] [Precision]", argv[0]);
+	//check(argc != 6, "Usage: %s [Port] [Party] [Input file] [Algorithm] [Num. iterations CGD] [Precision]", argv[0]);
+	//char *algorithm = argv[4];
+	//check(!strcmp(algorithm, "cholesky") || !strcmp(algorithm, "ldlt")  || !strcmp(algorithm, "cgd"),
+	//      "Algorithm must be cholesky, ldlt, or cgd.");
 	//check(strcmp(algorithm, "cgd") || argc == 6, "Number of iterations for CGD must be provided");
 	char *end;
-	precision = (int) strtol(argv[6], &end, 10);
+	precision = (int) strtol(argv[4], &end, 10);
 	check(!errno, "strtol: %s", strerror(errno));
 	check(!*end, "Precision must be a number");
 	int party = 0;
@@ -162,16 +216,19 @@ int main(int argc, char **argv) {
 	}
 	check(party > 0, "Party must be either 1 or 2.");
 
-	tridiagonal_matrix_t mat; 
-	printf("got here \n");
+	
+	symmetric_matrix_t mat;
+	//tridiagonal_matrix_t mat; 
 	//linear_system_t ls;
-	read_tridiag_mat_from_file(party, argv[3], &mat);
+	int res = read_sym_mat_from_file(party, argv[3], &mat); 
+	check(res == 0, "something went wrong at reading from file"); 
+	//read_tridiag_mat_from_file(party, argv[3], &mat);
 	//if(!strcmp(algorithm, "cgd")){
 	//       ls.num_iterations = atoi(argv[5]);
 	//} else {
 	//       ls.num_iterations = 0;
 	//}
-	printf("matrix read from party %d \n", party);
+	printf("matrix of size %d read from party %d \n", mat.d, party);
 
 	ProtocolDesc pd;
 	ocTestUtilTcpOrDie(&pd, party==1, argv[1]);
@@ -194,21 +251,25 @@ int main(int argc, char **argv) {
 	}
 	*/
 
+    execYaoProtocol(&pd, fullqr, &mat);
 
-    execYaoProtocol(&pd, qrtrd, &mat);
+    // execYaoProtocol(&pd, qrtrd, &mat);
 	//execYaoProtocol(&pd, algorithms[alg_index], &ls);
 	//execDebugProtocol(&pd, algorithms[alg_index], &ls);
+
 
 	if(party == 2) {
 	  //check(ls.beta.len == d, "Computation error.");
 	  printf("Time elapsed: %f\n", wallClock() - time);
 	  printf("Number of gates: %lld\n", mat.gates);
-	  printf("Final diagonal : ");
-	  for(size_t i = 0; i < mat.diag.len; i++) {
-	    printf("%20.15f ", fixed_to_double(mat.diag.value[i], precision));
+	  printf("Final result : ");
+	  for(size_t i = 0; i < mat.eigenvalues.len; i++){
+	  //for(size_t i = 0; i < mat.diag.len; i++) {
+	    printf("%20.15f ", fixed_to_double(mat.eigenvalues.value[i], precision));
 	  }
 	  printf("\n");
-      
+
+      /*      
       printf("Final offdiagonal: ");
 	  //for(size_t i = 0; i < mat.offdiag.len; i++) {
 	  //	for (size_t j = 0; j <= i; j++){
@@ -219,6 +280,7 @@ int main(int argc, char **argv) {
 	    printf("%20.15f ", fixed_to_double(mat.offdiag.value[i], precision));
 	  }
 	  printf("\n");
+	  */
 	}
 
 	/* This code is to run all three algorithms
