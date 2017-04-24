@@ -1,5 +1,13 @@
-## How to use the ppeig branch to compute eigenvalues of a square matrix. 
-The two main functions in this branch are `tridiag` and `qrtrd`.
+## How to use the ppeig branch to compute eigenvalues of a square matrix.
+The function `fullqr` computes eigenvalues of a symmetric matrix. 
+
+To test it, run 
+```
+bin/test_linear_system 1234 1 fullqr_8.in 54 & bin/test_linear_system 1234 2 fullqr_8.in 54
+```
+
+
+The two component functions in this branch are `tridiag` and `qrtrd`.
 
 The `tridiag` function takes a square symmetric matrix as input and reduces the matrix to tri-diagonal form.
 
